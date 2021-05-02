@@ -1,0 +1,80 @@
+---
+title: "Exploration of landprices"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Excercise description
+
+<i>"Hier geht es darum, die offizielle Daten der Stadt Wien zu den Grundstücks-Kaufpreisen der letzten Jahre zu visualisieren.
+
+Hintergrund: Open Government Data
+
+Seit einigen Jahren werden Daten durch die öffentliche Verwaltung zur Nutzung durch die Bevölkerung bereitgestellt. Das stellt - zumal für "gelernte Österreicherinnen und Österreicher" eine völlig neue Sichtweise dar. Vor dieser Zeit war es bekanntermaßen so, dass das Liefern der Daten sozusagen als Einwegfunktion abgewickelt wurde. Heute werden unter dem Schlagwort "Open Government Data" viele Datensets auf den Websites der Behörden zur Verwendung durch die Bevölkerung angeboten. Die Form des Angebots ist oft CSV oder gleich XLS. Fallweise sind es aber auch KML (Google Earth) oder Shapefiles (für GIS).
+
+Kaufpreise von Grundstücken in Wien
+
+Für diese Aufgabe sind nun die Kaufpreise von Grundstücken in Wien heranzuziehen.
+https://www.data.gv.at/katalog/dataset/kaufpreissammlung-liegenschaften-wien
+
+Aufgabe
+
+Die Aufgabe besteht darin, den Datenbestand zunächst explorativ zu analysieren (welche Stories stecken in den Daten) und danach ein Szenario und eine eigene Rolle zu suchen und für diese, eine der gefundenen Stories visuell aufzubereiten (egal, ob Wohnbaustadträtin und Gemeinderatssitzung, Immobilienmakler beim Meeting mit einer Investorengruppe, Sprecherin einer Bürgerinitiative gegen AirBnB usw.)
+
+Wie bei der ersten Aufgabe, ist auch eine kurze, begleitende Dokumentation über die Arbeit mit abzugeben, wo insbesondere der Entstehungsprozess und die Entscheidungen bei der Lösung der Aufgabe dokumentiert und erläutert wird.
+
+Für die Abgabe solltet Ihr vorzugsweise Tableau verwenden und Ihr könnt es auch in diesem Format abgeben. Falls Ihr andere Formate (zB Python oder R) verwenden wollt, ist das auch kein Problem. Wenn's was Exotisches ist, dann bitte inklusive eines Links, wo ich die entsprechende Software downloaden und installieren kann.
+
+Die Abgabe kann selbstverständlich auch aus mehreren oder interaktiven Visualiserungen bestehen. Bitte aber, alles in ein .ZIP verpacken und hier hochladen. </i>
+
+# Packages
+
+```{r}
+library(here)
+library(tidyverse)
+library(skimr)
+library(janitor)
+```
+
+# Data import
+
+```{r}
+data <- read_csv2(
+    here("01_data", "kaufpreissammlung_liegenschaften.csv"),
+    locale = readr::locale(encoding = "latin1")
+  ) %>%  clean_names()
+```
+
+# Description of dataset (German)
+* KG.Code = Katastralgemeindenummer
+* Katastralgemeinde = Katastralgemeindename
+* EZ = Einlagezahl
+* PLZ = Postleitzahl
+* ON = Orientierungsnummer
+* Gst. = Grundstücksnummer
+* Gst.Fl. = Grundstücksfläche
+* ErwArt = Erwerbsart (Kaufvertrag, Gemeinderatsbeschluss, etc.)
+* Schutzzone, Wohnzone, ÖZ, Bausperre: FALSCH=nein, WAHR=ja; parz.: J=parzelliert, * N=unparzelliert; 
+* VeräußererCode und Erwerbercode siehe nachstehende Legende; Anteile, Zähler, Nenner = * Eigentumsanteile; 
+* BJ = Baujahr; 
+* TZ = Tagebuchzahl; 
+* €/m² Gfl. = Kaufpreis pro m² Grundfläche in EUR; 
+* Baureifgest: FALSCH=keine Baureifgestaltung, WAHR=Baureifgestaltung; 
+* % Widmung = Anteil/Ausmaß der angegebenen Widmung in %; 
+* Baurecht: FALSCH=kein Baurecht, WAHR=Baurecht; 
+* Stammeinlage: FALSCH=keine Stammeinlage, WAHR=Stammeinlage; sonst_wid = sonstige Widmung; * sonst_wid_prz = Anteil der sonstigen Widmung in % Erwerber;
+* Veräußerer: Code 1, 2, 4, 5, 6, 7, 10, 11, 12, 14: Gebietskörperschaften und juristische * Personen mit öffentlichem Charakter (Bsp. Gemeinden, Länder, Bund, Wiener Stadtwerke, ÖBB, etc.) Code 3 gemeinnützige Bauvereinigungen (Bsp. Genossenschaften) Code 8 juristische Personen des Privatrechtes (Bsp. GmbH, OEG, KG, AG usw.) Code 9 Privatperson Code 13 Bescheid Adressaten (Bsp. Geldleistung/Ersatzleistung... aufgrund eines Bescheides im Zuge einer Bauplatzschaffung gemäß Bauordnung)
+
+# Exploration
+
+```{r}
+data %>% glimpse()
+```
+
+```{r}
+skim_without_charts(data)
+```
+
