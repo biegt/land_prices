@@ -78,3 +78,10 @@ data %>% glimpse()
 skim_without_charts(data)
 ```
 
+Years which are recorded in the dataset:
+```{r}
+sort(unique(unlist(map(str_split(data$erwerbsdatum, "\\."), 3))))
+```
+
+* Datensatz enthält Transaktionen zu Grundstücken in Wien
+* Erwerber und Veräußerer genauer anschauen
