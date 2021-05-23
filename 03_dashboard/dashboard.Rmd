@@ -1,0 +1,57 @@
+---
+title: "Grundstückspreise in Wien"
+output: 
+  flexdashboard::flex_dashboard:
+    storyboard: true
+    css: css/theme-flatly_custom.css
+    social: menu
+    source_code: embed
+
+---
+
+Hallo zusammen! Die Grundstückpreise sind in den letzten Jahren stark gestiegen.
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+```
+
+
+-----------------------------------------------------------------------
+
+### Chart A
+
+```{r}
+
+```
+
+
+-----------------------------------------------------------------------
+
+### Chart B
+
+```{r}
+
+```
+
+### Chart C
+
+```{r}
+
+```
+
+-----------------------------------------------------------------------
+
+### Chart D
+
+```{r}
+
+```
+
+-----------------------------------------------------------------------
+
+### Chart E
+
+```{r}
+
+```

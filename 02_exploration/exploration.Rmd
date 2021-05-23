@@ -1,87 +1,88 @@
 ---
-title: "Exploration of landprices"
+title: "exploration"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Excercise description
+# Aufgabenstellung
+In dieser letzten Aufgabe geht es um die bewusste Manipulation der Darstellung um einen Standpunkt zu unterstreichen.
 
-<i>"Hier geht es darum, die offizielle Daten der Stadt Wien zu den Grundstücks-Kaufpreisen der letzten Jahre zu visualisieren.
+Hunde in der Stadt
 
-Hintergrund: Open Government Data
+sind ein gutes Thema, das man sicherlich kontrovers disktuieren kann. Auf der negativen Seite sind hier zB Themen wie Verschmutzung des öffentlichen Raums, Lärm oder die Bedrohung durch Kampfhunde zu nennen, auf der positiven Seite finden sich Argumente wie soziale und gesundheitliche Faktoren oder der Einsatz von Wach-, Blinden- oder Diensthunden.
 
-Seit einigen Jahren werden Daten durch die öffentliche Verwaltung zur Nutzung durch die Bevölkerung bereitgestellt. Das stellt - zumal für "gelernte Österreicherinnen und Österreicher" eine völlig neue Sichtweise dar. Vor dieser Zeit war es bekanntermaßen so, dass das Liefern der Daten sozusagen als Einwegfunktion abgewickelt wurde. Heute werden unter dem Schlagwort "Open Government Data" viele Datensets auf den Websites der Behörden zur Verwendung durch die Bevölkerung angeboten. Die Form des Angebots ist oft CSV oder gleich XLS. Fallweise sind es aber auch KML (Google Earth) oder Shapefiles (für GIS).
 
-Kaufpreise von Grundstücken in Wien
+Die Aufgabe
 
-Für diese Aufgabe sind nun die Kaufpreise von Grundstücken in Wien heranzuziehen.
-https://www.data.gv.at/katalog/dataset/kaufpreissammlung-liegenschaften-wien
+besteht darin, einen subjektiven Standpunkt einzunehmen und auf Basis der folgenden Daten
+eine Visualisierung herzustellen, die diesen subjektiven Standpunkt unterstützt und dabei aber mit den unsauberen(?) Mitteln, die in "So lügt man mit Statistik" beschrieben sind, arbeitet.
 
-Aufgabe
 
-Die Aufgabe besteht darin, den Datenbestand zunächst explorativ zu analysieren (welche Stories stecken in den Daten) und danach ein Szenario und eine eigene Rolle zu suchen und für diese, eine der gefundenen Stories visuell aufzubereiten (egal, ob Wohnbaustadträtin und Gemeinderatssitzung, Immobilienmakler beim Meeting mit einer Investorengruppe, Sprecherin einer Bürgerinitiative gegen AirBnB usw.)
 
-Wie bei der ersten Aufgabe, ist auch eine kurze, begleitende Dokumentation über die Arbeit mit abzugeben, wo insbesondere der Entstehungsprozess und die Entscheidungen bei der Lösung der Aufgabe dokumentiert und erläutert wird.
+Abgabe
 
-Für die Abgabe solltet Ihr vorzugsweise Tableau verwenden und Ihr könnt es auch in diesem Format abgeben. Falls Ihr andere Formate (zB Python oder R) verwenden wollt, ist das auch kein Problem. Wenn's was Exotisches ist, dann bitte inklusive eines Links, wo ich die entsprechende Software downloaden und installieren kann.
+Neben der eigentlichen Visualisierung soll wiederum ein begleitendes Dokument abgeben werden, das diesmal erläutert, in welchen Kapiteln des Buches von Walter Krämer die eigene Grafik als Beispiel genannt werden könnte - Bitte jeweils mit kurzer(!) Begründung. Mehrfache Zuordnungen sind dabei explizit erwünscht.
 
-Die Abgabe kann selbstverständlich auch aus mehreren oder interaktiven Visualiserungen bestehen. Bitte aber, alles in ein .ZIP verpacken und hier hochladen. </i>
+Die Illusion der Präzision
+Die betrügerische Basis
+Vorsicht Kurve!
+Protzige Prozent
+Manipulierte Mittelwerte
+Trügerische Trends
+Der synthetische Superlativ
+Die vorsortierte Stichprobe
+Das frisierte Piktogramm
+...
+Für die Erledigung dieser Aufgabe (Lesen des Buches, Visualisierung, Doku) kalkuliere ich 1 ECTS-Punkt (25h)
 
-# Packages
+Späteste Abgabe
+Die Abgabe muss jedenfalls vor einem Masterprüfungstermin erfolgen. Für jene, die erste später Prüfung haben, ist der späteste Abgabetermin das Semesterende.
+
 
 ```{r}
-library(here)
+library(rvest)
 library(tidyverse)
-library(skimr)
 library(janitor)
 ```
 
-# Data import
-
 ```{r}
-data <- read_csv2(
-    here("01_data", "kaufpreissammlung_liegenschaften.csv"),
-    locale = readr::locale(encoding = "latin1")
-  ) %>%  clean_names()
+url <- "https://www.wien.gv.at/statistik/lebensraum/tabellen/hundebestand-bez.html"
+dogs_per_district <- (url %>%
+                        read_html %>%
+                        html_nodes(xpath = '/html/body') %>%
+                        html_table())[[1]] %>%
+  setNames(paste("Anzahl Hunde", str_remove(.[1,], "\\*+"))) %>%
+  slice(-1) %>%
+  mutate(across(
+    names(.)[str_detect(names(.), "20\\d+")],
+    ~ as.character(.) %>% str_remove("\\.") %>% as.double()
+  ))
+
+tab_4_3_1_freizeitundsport_ <- read_delim("01_data/tab_4.3.1_freizeitundsport_.csv", 
+ ";", escape_double = FALSE, trim_ws = TRUE, skip = 2, locale = readr::locale(encoding = "utf8"))
 ```
 
-# Description of dataset (German)
-* KG.Code = Katastralgemeindenummer
-* Katastralgemeinde = Katastralgemeindename
-* EZ = Einlagezahl
-* PLZ = Postleitzahl
-* ON = Orientierungsnummer
-* Gst. = Grundstücksnummer
-* Gst.Fl. = Grundstücksfläche
-* ErwArt = Erwerbsart (Kaufvertrag, Gemeinderatsbeschluss, etc.)
-* Schutzzone, Wohnzone, ÖZ, Bausperre: FALSCH=nein, WAHR=ja; parz.: J=parzelliert, * N=unparzelliert; 
-* VeräußererCode und Erwerbercode siehe nachstehende Legende; Anteile, Zähler, Nenner = * Eigentumsanteile; 
-* BJ = Baujahr; 
-* TZ = Tagebuchzahl; 
-* €/m² Gfl. = Kaufpreis pro m² Grundfläche in EUR; 
-* Baureifgest: FALSCH=keine Baureifgestaltung, WAHR=Baureifgestaltung; 
-* % Widmung = Anteil/Ausmaß der angegebenen Widmung in %; 
-* Baurecht: FALSCH=kein Baurecht, WAHR=Baurecht; 
-* Stammeinlage: FALSCH=keine Stammeinlage, WAHR=Stammeinlage; sonst_wid = sonstige Widmung; * sonst_wid_prz = Anteil der sonstigen Widmung in % Erwerber;
-* Veräußerer: Code 1, 2, 4, 5, 6, 7, 10, 11, 12, 14: Gebietskörperschaften und juristische * Personen mit öffentlichem Charakter (Bsp. Gemeinden, Länder, Bund, Wiener Stadtwerke, ÖBB, etc.) Code 3 gemeinnützige Bauvereinigungen (Bsp. Genossenschaften) Code 8 juristische Personen des Privatrechtes (Bsp. GmbH, OEG, KG, AG usw.) Code 9 Privatperson Code 13 Bescheid Adressaten (Bsp. Geldleistung/Ersatzleistung... aufgrund eines Bescheides im Zuge einer Bauplatzschaffung gemäß Bauordnung)
-
-# Exploration
 
 ```{r}
-data %>% glimpse()
+url_2 <- "https://www.wien.gv.at/statistik/lebensraum/tabellen/hundezonen-bez.html"
+
+(url_2 %>%
+  read_html %>%
+  html_nodes(xpath = '/html/body') %>%
+  html_table())[[1]]
 ```
 
-```{r}
-skim_without_charts(data)
-```
+Ideen: 
 
-Years which are recorded in the dataset:
-```{r}
-sort(unique(unlist(map(str_split(data$erwerbsdatum, "\\."), 3))))
-```
+* Hundeanteil korreliert mit anderen "positiven" Parameter (Lebensqualität, Parkflächen, etc.)
+* Ausfläche wird "anderen wegenommen" -> Hunde nehmen Platz weg
+* Kampfhundvorfälle
 
-* Datensatz enthält Transaktionen zu Grundstücken in Wien
-* Erwerber und Veräußerer genauer anschauen
+Next steps:
+
+* Datencleaning abschließen und gescrapte Datensätze lokal speichern
+* Weitere Datensätze raussuchen
+* Explorieren + Darstellungsform und
