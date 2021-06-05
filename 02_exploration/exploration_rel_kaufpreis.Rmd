@@ -132,7 +132,7 @@ data %>%
 
 ```{r}
 data %>% 
-  ggplot(aes(x = plz, y = kaupreis)) +
+  ggplot(aes(x = plz, y = kaufpreis)) +
   geom_boxplot() +
   scale_y_log10() +
   coord_flip()
@@ -194,7 +194,7 @@ data %>%
 ```{r}
 data %>% 
   group_by(jahr) %>% 
-  summarize(median_kaufpreis = mean(m2_gfl, na.rm = TRUE)) %>% 
+  summarize(median_kaufpreis = mean(rel_kaufpreis, na.rm = TRUE)) %>% 
   ggplot(aes(x = jahr, y = median_kaufpreis)) +
   geom_line()
 ```
@@ -204,7 +204,7 @@ data %>%
 ```{r}
 data %>% 
   group_by(jahr, verauserer) %>% 
-  summarize(median_kaufpreis = mean(m2_gfl, na.rm = TRUE)) %>% 
+  summarize(median_kaufpreis = mean(rel_kaufpreis, na.rm = TRUE)) %>% 
   ggplot(aes(x = jahr, y = median_kaufpreis)) +
   geom_line() +
   facet_wrap(~ verauserer)
@@ -214,7 +214,7 @@ data %>%
 ```{r}
 data %>% 
   group_by(jahr, erwerber) %>% 
-  summarize(median_kaufpreis = mean(m2_gfl, na.rm = TRUE)) %>% 
+  summarize(median_kaufpreis = mean(rel_kaufpreis, na.rm = TRUE)) %>% 
   ggplot(aes(x = jahr, y = median_kaufpreis)) +
   geom_line() +
   facet_wrap(~erwerber)
@@ -226,7 +226,7 @@ data %>%
 ```{r}
 data %>% 
   group_by(jahr, bezirk) %>% 
-  summarize(median_kaufpreis = median(m2_gfl, na.rm = TRUE)) %>% 
+  summarize(median_kaufpreis = median(rel_kaufpreis, na.rm = TRUE)) %>% 
   ggplot(aes(x = jahr, y = median_kaufpreis)) +
   geom_line() +
   facet_wrap(~bezirk)
@@ -295,6 +295,19 @@ data %>%
   ggplot(aes(x = jahr, y = n, color = erwerber)) +
   geom_line()
 ```
+
+## Nach Bezirk, Erwerber und Jahr
+
+```{r}
+data %>% 
+  count(jahr, bezirk, erwerber) %>% 
+  ggplot(aes(x = jahr, y = n, color = erwerber)) +
+  geom_line() +
+  facet_wrap(~ bezirk, scales = "free_y") +
+  theme(legend.position = "none")
+```
+
+
 ## Detailanalyse - Erwerber und Veräußer gemeinsam betrachtet
 
 ### Anzahl der Transaktionen zwischen Privatpersonen und GmbHs etc.:
@@ -322,7 +335,7 @@ data %>%
 data %>% 
   filter(verauserer == "Jur. Personen des Privatrechts", erwerber == "Privatpersonen") %>% 
   group_by(jahr) %>% 
-  summarise(median_kaufpreis = median(m2_gfl, na.rm = TRUE)) %>% 
+  summarise(median_kaufpreis = median(rel_kaufpreis, na.rm = TRUE)) %>% 
   ggplot(aes(x = jahr, y = median_kaufpreis)) +
   geom_line()
 ```
@@ -332,7 +345,7 @@ data %>%
 data %>% 
   filter(erwerber == "Jur. Personen des Privatrechts", verauserer == "Privatpersonen") %>% 
   group_by(jahr) %>% 
-  summarise(median_kaufpreis = median(m2_gfl, na.rm = TRUE)) %>% 
+  summarise(median_kaufpreis = median(rel_kaufpreis, na.rm = TRUE)) %>% 
   ggplot(aes(x = jahr, y = median_kaufpreis)) +
   geom_line()
 ```
@@ -341,7 +354,7 @@ data %>%
 ## Vorhersage Quadratmeterpreis
 
 ```{r}
-summary(lm(m2_gfl ~ plz, data = filter(data, jahr == 2018)))
+summary(lm(rel_kaufpreis ~ plz, data = filter(data, jahr == 2018)))
 ```
 
 # Notes / Next steps:
