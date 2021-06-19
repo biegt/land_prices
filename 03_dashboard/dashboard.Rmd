@@ -6,49 +6,246 @@ output:
     css: css/theme_custom.css
     social: menu
     source_code: embed
+    runtime: shiny
 
 ---
 
-Hallo zusammen! Die Grundstückpreise sind in den letzten Jahren stark gestiegen.
 
 
 ```{r setup, include=FALSE}
 library(flexdashboard)
+library(here)
+library(tidyverse)
+library(skimr)
+library(janitor)
+library(lubridate)
+library(rvest)
+library(scales)
+library(plotly)
+
+
+district_area_mapping <-  read_html("https://de.wikipedia.org/wiki/Wiener_Katastralgemeinden") %>% 
+  html_node(xpath = '//*[@id="mw-content-text"]/div[1]/table') %>% 
+  html_table() %>% 
+  clean_names()
+
+data <- read_csv2(
+    here("01_data", "kaufpreissammlung_liegenschaften.csv"),
+    locale = readr::locale(encoding = "latin1")
+  ) %>%  clean_names() %>% 
+  left_join(select(district_area_mapping, katastral_gemeinde, bezirk),
+            by = c("katastralgemeinde" = "katastral_gemeinde")) %>% 
+  mutate(erwerbsdatum = dmy(erwerbsdatum),
+         jahr = year(erwerbsdatum),
+         jahr = if_else(jahr == 2106, 2016, jahr),
+         plz = as.factor(plz),
+         ez = as.factor(ez) ,
+         bezirk = str_extract(bezirk, "\\d{1,2}\\.\\s.+?(?=\\d)"),
+         verauserer = case_when(verausserer_code %in% c(1, 2, 4, 5, 6, 7, 10, 11, 12, 14) ~ "Gebietskörperschaften, jur. Personen mit öffentlichem Charakter",
+                                verausserer_code == 3 ~ "Gemeinnützige Bauvereinigungen",
+                                verausserer_code == 8 ~ "Jur. Personen des Privatrechts",
+                                verausserer_code == 9 ~ "Privatpersonen",
+                                TRUE ~ "Sonstige"
+                                ),
+         erwerber  = case_when(erwerbercode %in% c(1, 2, 4, 5, 6, 7, 10, 11, 12, 14) ~"jur. Personen mit öffentlichem Charakter",
+                                erwerbercode == 3 ~ "Gemeinnützige Bauvereinigungen",
+                                erwerbercode == 8 ~ "Jur. Personen des Privatrechts",
+                                erwerbercode == 9 ~ "Privatpersonen",
+                                TRUE ~ "Sonstige"
+                                ),
+         rel_kaufpreis = kaufpreis / gst_fl
+         ) %>% 
+  filter(
+    str_detect(plz, "\\d{4}"),
+    between(jahr, 1987, 2019),
+    !is.na(bezirk),
+    erwerber != "Sonstige",
+    verauserer != "Sonstige"
+  )
+
+theme_set(theme_bw() + theme(strip.background = element_blank()))
 ```
 
+### Verteilung Erwerber pro Bezirk
+
+Die Verteilung impliziert einige Bezirke, die in der typsicherweise sdfsdfsdfsfadFSAFDSAFDCBSDJFBSFSFF
+
+```{r}
+erwbars <- data %>% 
+  count(bezirk, erwerber, sort = TRUE) %>% 
+  group_by(bezirk) %>% 
+  mutate(prop = n / sum(n)) %>% 
+  ggplot(aes(x = erwerber, y = prop, fill = erwerber)) +
+  geom_col() +
+  facet_wrap(~ bezirk) +
+  scale_y_continuous(labels = percent_format()) +
+  scale_fill_manual(values = c("#8FB9A8", "#FEFAD4", "#F1828D", "#765D69")) +
+theme(axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank(),
+        strip.background = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      legend.position = "left") +
+  labs(y = "Anteil", fill = "Erwerber")
+
+ggplotly(erwbars) %>% layout(legend = list(orientation = "v"))
+```
 
 -----------------------------------------------------------------------
 
-### Chart A
-
 ```{r}
+# age
+sliderInput("agerange", label = "Age", 
+            min = 15, 
+            max = 99, 
+            value = c(15, 99),
+            step=10)
 
+# age category
+selectInput("agecat", label = "Age Category", 
+            choices = list("All" = 1,
+                           "15-19" = 2, 
+                           "20-24" = 3), 
+            selected = 1)
 ```
 
 
------------------------------------------------------------------------
+### Verteilung der Veräußerer pro Bezirk
 
-### Chart B
+Die Verteilung impliziert einige Bezirke, die in der typsicherweise sdfsdfsdfsfadFSAFDSAFDCBSDJFBSFSFF.
 
 ```{r}
+verau_bars <- data %>% 
+  count(bezirk, verauserer, sort = TRUE) %>% 
+  group_by(bezirk) %>% 
+  mutate(prop = n / sum(n)) %>% 
+  ggplot(aes(x = verauserer, y = prop, fill = verauserer)) +
+  geom_col() +
+  facet_wrap(~ bezirk) +
+  scale_y_continuous(labels = percent_format()) +
+  scale_fill_manual(values = c("#8FB9A8", "#FEFAD4", "#F1828D", "#765D69")) +
+theme(axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank(),
+        strip.background = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      legend.position = "left") +
+  labs(y = "Anteil", fill = "Veräußerer")
 
+ggplotly(verau_bars) %>% layout(legend = list(orientation = "v"))
+```
+
+-----------------------------------------------------------------------
+
+```{r}
+# age
+sliderInput("agerange", label = "Age", 
+            min = 15, 
+            max = 99, 
+            value = c(15, 99),
+            step=10)
+
+# age category
+selectInput("agecat", label = "Age Category", 
+            choices = list("All" = 1,
+                           "15-19" = 2, 
+                           "20-24" = 3), 
+            selected = 1)
 ```
 
 ### Chart C
 
 ```{r}
-
+data %>% 
+  group_by(bezirk, jahr, erwerber) %>% 
+  summarize(median_kaufpreis = median(rel_kaufpreis, na.rm = TRUE)) %>% 
+  ggplot(aes(x = jahr, y = median_kaufpreis, color = erwerber)) +
+  geom_line() +
+  facet_wrap(~ bezirk, scales = "free_y")
 ```
 
+```{r}
+data %>% group_by(jahr) %>% 
+  summarize(median_kaufpreis = median(rel_kaufpreis, na.rm = TRUE)) %>% 
+  ggplot(aes(x = jahr, y = median_kaufpreis)) +
+  geom_line()
+```
+
+```{r}
+data %>% group_by(jahr, erwerber) %>% 
+  summarize(median_kaufpreis = median(rel_kaufpreis, na.rm = TRUE)) %>% 
+  ggplot(aes(x = jahr, y = median_kaufpreis, color = erwerber)) +
+  geom_line()
+```
+
+Hier könnte man noch einen Forecast einbauen! Annahme: Preise sind Inflationskorrigiert bzw. anstieg sowieso stärker als Inflation.
+
 -----------------------------------------------------------------------
+
+```{r}
+# age
+sliderInput("agerange", label = "Age", 
+            min = 15, 
+            max = 99, 
+            value = c(15, 99),
+            step=10)
+
+# age category
+selectInput("agecat", label = "Age Category", 
+            choices = list("All" = 1,
+                           "15-19" = 2, 
+                           "20-24" = 3), 
+            selected = 1)
+```
 
 ### Chart D
 
 ```{r}
 
+# data %>% 
+#   count(jahr, verauserer) %>% 
+#   ggplot(aes(x = jahr, y = n, color = verauserer)) +
+#   geom_line()
+
+data %>% 
+  count(bezirk, jahr, erwerber) %>% 
+  ggplot(aes(x = jahr, y = n, color = erwerber)) +
+  geom_line() +
+  facet_wrap(~ bezirk, scales = "free_y")
+
+data %>% 
+  count(jahr, erwerber) %>% 
+  ggplot(aes(x = jahr, y = n, color = erwerber)) +
+  geom_line()
 ```
 
 -----------------------------------------------------------------------
+
+
+```{r}
+# age
+sliderInput("agerange", label = "Age", 
+            min = 15, 
+            max = 99, 
+            value = c(15, 99),
+            step=10)
+
+# age category
+selectInput("agecat", label = "Age Category", 
+            choices = list("All" = 1,
+                           "15-19" = 2, 
+                           "20-24" = 3), 
+            selected = 1)
+```
+
+Bestimmter Bezirke Attraktiver machen für private Unternehmen
+
+Story: Preise steigen - gleichzeitig geht die übersteigt die Anzahl Übersteigt die Anzahl von Käufen durch Unternehmen, Käufe durch Privatleute. Verdacht leistbare Wohnraum wird knapp also muss mehr gebaut werden. Höhere Kaufpreise bei Unternehmen implizieren höhere Kaufkraft bei steigenden Preisen.
+
+ggf. noch Darstellung von Bezirk (Beispiel bezirk, wo sich Verhältnis gekippt ist)
+
 
 ### Chart E
 
