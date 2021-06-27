@@ -133,7 +133,7 @@ data %>%
 
 ```{r}
 data %>% 
-  ggplot(aes(x = plz, y = kaupreis)) +
+  ggplot(aes(x = plz, y = kaufpreis)) +
   geom_boxplot() +
   scale_y_log10() +
   coord_flip()
@@ -371,3 +371,478 @@ Notes für Doku:
 * Widmung betrachtet -> Kodierung der Widmung schlecht dokumentiert, nicht gut nachvollziehbar
 * Vorhersage Qudratmeterpreis / Preis -> ggf. noch zu berücksichtigen
 * Auch Zuordnung exploriert, aber zu keiner sinnvollen Story gekommen
+
+# Daten-Vorbereitung für Dashboard
+
+```{r}
+library(sf)
+library(here)
+library(janitor)
+
+map_data <-
+  st_read(here("01_data", "ZAEHLBEZIRKOGDPolygon.shp"), options = "ENCODING=WINDOWS-1252") %>%
+  clean_names() %>%
+  group_by(bez) %>%
+  summarize(geometry = st_union(geometry),
+            flaeche = sum(flaeche)) %>%
+  left_join(
+    data %>% distinct(bezirk) %>%
+      mutate(bez_num = str_extract(bezirk, "\\d{1,2}") %>% str_pad(2, side = "left", 0)),
+    by = c("bez" = "bez_num")
+  ) %>% 
+  mutate(
+    bez_num = as.numeric(bez)
+  ) %>% 
+    select(-flaeche) %>% 
+  rename(Bezirk = bezirk)
+ 
+# ts_data <- data %>% 
+#   group_by(bezirk, jahr) %>%
+#   summarise(mdn_rel_kaufpreis = round(median(rel_kaufpreis, na.rm = TRUE), 2)) %>% 
+#   mutate(bez_num = str_extract(bezirk, "\\d{1,2}")) %>% 
+#   rename(Jahr = jahr,
+#          Preis = mdn_rel_kaufpreis)
+# 
+# write_csv(ts_data, here("01_data", "processed", "mdn_prices_by_year_district.csv"))
+st_write(map_data, here("01_data", "processed", "districts.shp"))
+
+ts_data_new <- data %>% 
+  filter(erwerber %in% c("Jur. Personen des Privatrechts", "Privatpersonen")) %>% 
+  group_by(erwerber, jahr, bezirk) %>% 
+  summarize(
+    `Median-Preis (gesamt, €)` = round(median(kaufpreis, na.rm = TRUE), 2),
+    `Median-Preis (relativ, €)` = round(median(rel_kaufpreis, na.rm = TRUE), 2),
+    `Anzahl Transaktionen`= n(),
+    `Gesamt-Volumen (€)` = sum(kaufpreis, na.rm = TRUE)
+  ) %>% 
+  ungroup() %>% 
+  rename(
+    Jahr = jahr,
+    Erwerber = erwerber,
+    Bezirk = bezirk
+  ) %>% 
+  mutate(bez_num = str_extract(Bezirk, "\\d{1,2}"),
+         Erwerber = if_else(Erwerber == "Privatpersonen", Erwerber, "Unternehmen")) 
+  # left_join(
+  #   select(map_data, bez, geometry),
+  #   by = c("bez_num" = "bez")
+  # ) %>% 
+  # st_as_sf()
+
+
+write_csv(ts_data_new,
+          here("01_data", "processed", "metrics_by_buyer_year_district.csv"))
+
+```
+
+
+```{r}
+
+pal <- colorNumeric("viridis", domain = map_data$flaeche)
+
+leaflet(map_data)  %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(
+    color = "#222",
+    weight = 0.7,
+    opacity = 1,
+    fillColor = ~ pal(map_data$flaeche),
+    fillOpacity = 0.7,
+    label = ~ lapply(paste0(
+      "<br>",
+      map_data$bezirk,
+      "</b><br> Vorhersage:",
+      round(map_data$flaeche, 2),
+      " Prozent"
+    ), HTML),
+    labelOptions = labelOptions(direction = "top"),
+    highlight = highlightOptions(color = "#FFF", bringToFront = TRUE)
+  )
+
+ts_data %>%
+  ggplot(aes(x = jahr, y = mdn_rel_kaufpreis)) +
+  geom_line() +
+  facet_wrap(~ bezirk, scales = "free_y") +
+  theme_bw() +
+  theme(strip.background = element_blank())
+
+```
+
+# Time Series Modelling
+```{r}
+library(xgboost)
+library(tidymodels)
+library(modeltime)
+library(tidyverse)
+library(lubridate)
+library(modeltime.ensemble)
+library(timetk)
+library(rsample)
+library(parsnip)
+library(recipes)
+library(workflows)
+```
+
+```{r}
+ts_data_bez1 <- ts_data %>%
+  mutate(Jahr = ymd(paste0(Jahr, "-01-01"))) %>% 
+  filter(bez_num == 1) 
+
+ts_data_bez1 %>% 
+  plot_time_series(Jahr, Preis)
+
+splits <- initial_time_split(ts_data_bez1, prop = 0.9)
+
+
+model_fit_arima_boosted <- arima_boost(
+    min_n = 2,
+    learn_rate = 0.015
+) %>%
+    set_engine(engine = "auto_arima_xgboost") %>%
+    fit(Preis ~ Jahr, data = training(splits))
+
+model_fit_ets <- exp_smoothing() %>%
+    set_engine(engine = "ets") %>%
+    fit(Preis ~ Jahr, data = training(splits))
+
+model_fit_prophet <- prophet_reg() %>%
+    set_engine(engine = "prophet") %>%
+    fit(Preis ~ Jahr, data = training(splits))
+
+model_fit_rf <- rand_forest(trees = 20, mode = "regression") %>% set_engine("ranger") %>% 
+  fit(Preis ~ Jahr, data = training(splits))
+
+model_fit_xgboost <- boost_tree(mode = "regression") %>% set_engine("xgboost") %>% 
+  fit(Preis ~ Jahr, data = training(splits))
+
+model_fit_lm <- linear_reg() %>%
+    set_engine("lm") %>%
+    fit(Preis ~ as.numeric(Jahr),
+        data = training(splits))
+
+
+models_tbl <- modeltime_table(
+    model_fit_arima_boosted,
+    model_fit_ets,
+    model_fit_prophet,
+    model_fit_lm,
+    model_fit_rf,
+    model_fit_xgboost)
+
+calibration_tbl <- models_tbl %>%
+    modeltime_calibrate(new_data = testing(splits))
+```
+
+```{r}
+calibration_tbl %>%
+    modeltime_forecast(
+        new_data    = testing(splits),
+        actual_data = ts_data_bez1
+    ) %>%
+    plot_modeltime_forecast(
+      .legend_max_width = 25, # For mobile screens
+      .interactive      = TRUE
+    )
+```
+
+```{r}
+refit_tbl <- calibration_tbl %>%
+    modeltime_refit(data = ts_data_bez1)
+
+refit_tbl %>%
+    modeltime_forecast(h = "10 years", actual_data = ts_data_bez1) %>%
+    plot_modeltime_forecast(
+      .legend_max_width = 25, # For mobile screens
+      .interactive      = TRUE
+    )
+```
+
+```{r}
+calibration_tbl %>%
+    modeltime_accuracy() %>%
+    table_modeltime_accuracy(
+        .interactive = TRUE
+    )
+```
+
+```{r}
+ensemble_fit_median <- models_tbl %>% 
+ensemble_average("mean")
+
+ensemble_tbl <- modeltime_table(ensemble_fit_median)
+
+ensemble_tbl %>% 
+  combine_modeltime_tables(models_tbl) %>% 
+  modeltime_accuracy(testing(splits)) 
+```
+
+
+```{r}
+library(forecast)
+
+
+fc_test <- ts(ts_data_bez1$Preis, start = 1987)
+plot(forecast(auto.arima(fc_test),h=5))
+plot(forecast(ets(fc_test),h=5))
+plot(forecast(auto.arima(fc_test,d=1),h=5))
+plot(forecast(auto.arima(fc_test,d=2),h=5))
+```
+## Über alle Datensätze fitten
+
+```{r}
+ts_data %>%
+  mutate(Jahr = ymd(paste0(Jahr, "-01-01"))) %>%
+  group_by(bezirk) %>% 
+  plot_time_series(Jahr, Preis, .facet_ncol = 4)
+```
+
+```{r}
+ts_data_full <- ts_data %>% 
+  mutate(Jahr = ymd(paste0(Jahr, "-01-01"))) %>%
+  select(-bez_num) %>% 
+  group_by(bezirk) %>% 
+  future_frame(
+    .date_var = Jahr,
+    .length_out = 10, 
+    .bind_data = TRUE
+    ) %>% 
+  ungroup()
+```
+
+```{r}
+ts_data_full %>% 
+  group_by(bezirk) %>% 
+  tk_summary_diagnostics()
+```
+
+```{r}
+ts_data_train <-
+  ts_data_full %>% 
+  filter(!is.na(Preis))
+
+ts_data_test <-
+  ts_data_full %>% 
+  filter(is.na(Preis))
+```
+
+```{r}
+splits <- ts_data_train %>% 
+  time_series_split(
+    date_var = Jahr,
+    assess = 5,
+    cumulative = TRUE
+  )
+
+recipe_1 <- recipe(Preis ~ ., training(splits)) %>% 
+  step_dummy(bezirk, one_hot = TRUE)
+
+recipe_1 %>% prep() %>% juice %>% glimpse()
+
+recipe_2 <- recipe_1 %>% 
+  update_role(Jahr, new_role = "ID")
+
+recipe_2 %>% prep() %>% summary()
+```
+
+### Modelling
+```{r}
+library(workflows)
+
+wkfl_fit_prohpet <- workflow() %>% 
+  add_model(
+    prophet_reg() %>% set_engine("prophet")
+    ) %>% 
+  add_recipe(recipe_1) %>% 
+  fit(training(splits))
+
+wkfl_fit_xgboost <- workflow() %>% 
+  add_model(
+    boost_tree() %>% set_engine("xgboost")
+  ) %>% 
+  add_recipe(recipe_2) %>% 
+  fit(training(splits))
+
+wkfl_fit_rf <- workflow() %>% 
+  add_model(
+    rand_forest() %>% set_engine("ranger")
+  ) %>% 
+  add_recipe(recipe_2) %>% 
+  fit(training(splits))
+
+wkfl_fit_ets <- workflow() %>% 
+  add_model(
+    exp_smoothing() %>% set_engine(engine = "ets")
+  ) %>% 
+  add_recipe(recipe_1) %>% 
+  fit(training(splits))
+
+models_tbl <- modeltime_table(
+  wkfl_fit_prohpet,
+  wkfl_fit_rf,
+  wkfl_fit_xgboost,
+  wkfl_fit_ets
+)
+
+calibration_tbl <- models_tbl %>% 
+  modeltime_calibrate(testing(splits))
+
+calibration_tbl %>% modeltime_accuracy()
+```
+
+```{r}
+calibration_tbl %>% 
+  modeltime_forecast(
+    new_data = testing(splits),
+    actual_data = ts_data_train,
+    keep_data = TRUE
+  ) %>% 
+  group_by(bezirk) %>% 
+  plot_modeltime_forecast(.facet_ncol = 4)
+```
+
+```{r}
+calibration_tbl %>% 
+  modeltime_forecast(
+    new_data = ts_data_test,
+    actual_data = ts_data_train,
+    keep_data = TRUE
+  ) %>% 
+  group_by(bezirk) %>% 
+  plot_modeltime_forecast(.facet_ncol = 4)
+```
+
+Conclusion: Gemeinsames Modell funktioniert nicht -> wahrscheinlich am einfachsten ein Modell pro Bezirk
+
+```{r}
+library(forecast)
+
+ts_data_bez2 <- ts_data %>% filter(bez_num == 22)
+
+fc_test <- ts(ts_data_bez2$Preis, start = 1987)
+plot(forecast(auto.arima(fc_test),h=10))
+plot(forecast(ets(fc_test),h=10))
+plot(forecast(auto.arima(fc_test,d=1),h=10))
+plot(forecast(auto.arima(fc_test,d=2),h=10))
+```
+
+Nächste Schritte:
+* Funktion schreiben, die Modell-Fit vergleicht und beste Modell auswählt
+* Funktion mappen auf jeden Bezirk
+* in der App / Doku muss dann auf die Limitationen des Ansatzes hingewiesen werden
+* ggf. noch Sample Size pro Bezirk / Jahr berichten
+
+
+Quelle: https://community.rstudio.com/t/how-to-compare-a-forecast-model-to-actual-data-and-what-is-uncertainty/23598/3
+
+# Vorhersage von Transaktionen für Bezirke
+
+```{r}
+
+library(forecast)
+
+ts_data_bez2 <- ts_data_new %>% filter(bez_num == 22, erwerber == "Jur. Personen des Privatrechts")
+
+fc_test <- ts(ts_data_bez2$n_transaktionen, start = 1987)
+plot(forecast(auto.arima(fc_test),h=10))
+plot(forecast(ets(fc_test),h=10))
+plot(forecast(auto.arima(fc_test,d=1),h=10))
+plot(forecast(auto.arima(fc_test,d=2),h=10))
+
+forecast_transactions <- function(data, district) {
+    district_data <- data %>% filter(bez_num == district, erwerber == "Jur. Personen des Privatrechts")
+  
+  district_ts <- ts(district_data$n_transaktionen, start = 1987)
+  plot(forecast(auto.arima(district_ts),h=10))
+  plot(forecast(ets(district_ts),h=10))
+  plot(forecast(auto.arima(district_ts,d=1),h=10))
+  plot(forecast(auto.arima(district_ts, d=2),h=10))
+}
+
+forecast_transactions(ts_data_new, 10)
+forecast_transactions(ts_data_new, 11)
+forecast_transactions(ts_data_new, 21)
+forecast_transactions(ts_data_new, 22)
+forecast_transactions(ts_data_new, 23)
+
+
+```
+
+```{r}
+forecast::autoplot(forecast(auto.arima(fc_test),h=10),
+         PI = TRUE,
+         shadecols = c("#FFFFFF", "#FFFFFf", "§sdfsfsdf"),
+         fcol = "#0000AA",
+         shaded = TRUE,
+         flwd = 0.5) +theme_bw()
+```
+
+```{r}
+library(ggfortify)
+
+fc_1 <- forecast(auto.arima(fc_test),h=10) 
+fc_2 <- forecast(ets(fc_test),h=10)
+fc_3 <- forecast(auto.arima(fc_test,d=1),h=10)
+fc_4 <- forecast(auto.arima(fc_test, d=2),h=10)
+
+test <- map(list(fc_1, fc_2, fc_3, fc_4), ~ as_tibble(fortify(.x))) %>% bind_rows(.id = "model")
+
+df1 <- fortify(fc_1) %>% as_tibble()
+
+generate_forecasts <- function(data, district) {
+
+  district_data <-
+    data %>%
+    filter(bez_num == district, Erwerber == "Unternehmen")  
+  
+  district <-unique(district_data$Bezirk)
+  district_ts <- ts(district_data$`Anzahl Transaktionen`, start = 1987)
+  
+  fc_1 <- forecast(auto.arima(district_ts), h = 10)
+  fc_2 <- forecast(ets(district_ts), h = 10)
+  fc_3 <- forecast(auto.arima(district_ts, d = 1), h = 10)
+  fc_4 <- forecast(auto.arima(district_ts, d = 2), h = 10)
+  
+  map(list(fc_1, fc_2, fc_3, fc_4),
+      ~ as_tibble(fortify(.x))) %>%
+    bind_rows(.id = "model") %>%
+    rename(
+      "Low95" = "Lo 95",
+      "Jahr" = "Index",
+      "Daten" = "Data",
+      "Low80" = "Lo 80",
+      "High95" = "Hi 95",
+      "High80" = "Hi 80",
+      "Vorhersage" = "Point Forecast"
+    ) %>%
+    mutate(
+      Modell = case_when(
+        model == 1 ~ "ARIMA (0,1,0)",
+        model == 2 ~ "ETS",
+        model == 3 ~ "ARIMA (0,1,0) mit Drift",
+        model == 4 ~ "ARIMA (0, 1, 2) mit Drift"
+      ),
+      Bezirk = district
+    )
+}
+
+fc_data <- map(c(10, 11, 21, 22, 23), ~ generate_forecasts(ts_data_new, .x)) %>% bind_rows() %>% select(-model)
+
+write_csv(fc_data, here("01_data", "processed", "fc_data.csv"))
+
+fc_plot <- ggplot(fc_data, aes(x = Jahr)) + 
+  geom_ribbon(aes(ymin = Low95, ymax = High95, fill = "95%"), fill = "#c0edec") +
+  geom_ribbon(aes(ymin = Low80, ymax = High80, fill = "80%"), fill = "#67c5c2") +
+  geom_line(aes(y = Daten, group = 1), colour = "black", size = 1.1) +
+  geom_line(aes(y = Vorhersage, group = 1), color = "#595959",  size = 0.75) +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white")) +
+  labs(x = "Jahr", y = "Anzahl Transaktionen") +
+  facet_grid(vars(Bezirk), vars(Modell), scales = "free_y")
+
+library(plotly)
+
+ggplotly(fc_plot, tooltip = c("x", "y"))
+
+
+```
+
