@@ -1,34 +1,11 @@
 ---
-title: "Exploration of landprices"
+title: "Exploration"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
-
-# Excercise description
-
-<i>"Hier geht es darum, die offizielle Daten der Stadt Wien zu den Grundstücks-Kaufpreisen der letzten Jahre zu visualisieren.
-
-Hintergrund: Open Government Data
-
-Seit einigen Jahren werden Daten durch die öffentliche Verwaltung zur Nutzung durch die Bevölkerung bereitgestellt. Das stellt - zumal für "gelernte Österreicherinnen und Österreicher" eine völlig neue Sichtweise dar. Vor dieser Zeit war es bekanntermaßen so, dass das Liefern der Daten sozusagen als Einwegfunktion abgewickelt wurde. Heute werden unter dem Schlagwort "Open Government Data" viele Datensets auf den Websites der Behörden zur Verwendung durch die Bevölkerung angeboten. Die Form des Angebots ist oft CSV oder gleich XLS. Fallweise sind es aber auch KML (Google Earth) oder Shapefiles (für GIS).
-
-Kaufpreise von Grundstücken in Wien
-
-Für diese Aufgabe sind nun die Kaufpreise von Grundstücken in Wien heranzuziehen.
-https://www.data.gv.at/katalog/dataset/kaufpreissammlung-liegenschaften-wien
-
-Aufgabe
-
-Die Aufgabe besteht darin, den Datenbestand zunächst explorativ zu analysieren (welche Stories stecken in den Daten) und danach ein Szenario und eine eigene Rolle zu suchen und für diese, eine der gefundenen Stories visuell aufzubereiten (egal, ob Wohnbaustadträtin und Gemeinderatssitzung, Immobilienmakler beim Meeting mit einer Investorengruppe, Sprecherin einer Bürgerinitiative gegen AirBnB usw.)
-
-Wie bei der ersten Aufgabe, ist auch eine kurze, begleitende Dokumentation über die Arbeit mit abzugeben, wo insbesondere der Entstehungsprozess und die Entscheidungen bei der Lösung der Aufgabe dokumentiert und erläutert wird.
-
-Für die Abgabe solltet Ihr vorzugsweise Tableau verwenden und Ihr könnt es auch in diesem Format abgeben. Falls Ihr andere Formate (zB Python oder R) verwenden wollt, ist das auch kein Problem. Wenn's was Exotisches ist, dann bitte inklusive eines Links, wo ich die entsprechende Software downloaden und installieren kann.
-
-Die Abgabe kann selbstverständlich auch aus mehreren oder interaktiven Visualiserungen bestehen. Bitte aber, alles in ein .ZIP verpacken und hier hochladen. </i>
 
 # Packages
 
@@ -39,53 +16,25 @@ library(skimr)
 library(janitor)
 library(lubridate)
 library(rvest)
-
-mean(!is.na(data))
-
 ```
 
-# Data import
+# Datenimport und -cleaning
 
 ```{r}
-district_area_mapping <-  read_html("https://de.wikipedia.org/wiki/Wiener_Katastralgemeinden") %>% 
-  html_node(xpath = '//*[@id="mw-content-text"]/div[1]/table') %>% 
-  html_table() %>% 
-  clean_names()
+district_area_mapping <- read_csv(here("01_data",
+                                       "processed",
+                                       "district_area_mapping.csv"))
 ```
 
 ```{r}
-data <- read_csv2(
-    here("01_data", "kaufpreissammlung_liegenschaften.csv"),
-    locale = readr::locale(encoding = "latin1")
-  ) %>%  clean_names() %>% 
-  left_join(select(district_area_mapping, katastral_gemeinde, bezirk),
-            by = c("katastralgemeinde" = "katastral_gemeinde")) %>% 
-  mutate(erwerbsdatum = dmy(erwerbsdatum),
-         jahr = year(erwerbsdatum),
-         jahr = if_else(jahr == 2106, 2016, jahr),
-         plz = as.factor(plz),
-         ez = as.factor(ez) ,
-         bezirk = str_extract(bezirk, "\\d{1,2}\\.\\s.+?(?=\\d)"),
-         verauserer = case_when(verausserer_code %in% c(1, 2, 4, 5, 6, 7, 10, 11, 12, 14) ~ "Gebietskörperschaften, jur. Personen mit öffentlichem Charakter",
-                                verausserer_code == 3 ~ "Gemeinnützige Bauvereinigungen",
-                                verausserer_code == 8 ~ "Jur. Personen des Privatrechts",
-                                verausserer_code == 9 ~ "Privatpersonen",
-                                TRUE ~ "Sonstige"
-                                ),
-         erwerber  = case_when(erwerbercode %in% c(1, 2, 4, 5, 6, 7, 10, 11, 12, 14) ~ "Gebietskörperschaften, jur. Personen mit öffentlichem Charakter",
-                                erwerbercode == 3 ~ "Gemeinnützige Bauvereinigungen",
-                                erwerbercode == 8 ~ "Jur. Personen des Privatrechts",
-                                erwerbercode == 9 ~ "Privatpersonen",
-                                TRUE ~ "Sonstige"
-                                ),
-         rel_kaufpreis = kaufpreis / gst_fl
-         ) %>% 
-  filter(str_detect(plz, "\\d{4}"), between(jahr, 1987, 2019), !is.na(bezirk)) 
+data <- read_csv(here("01_data",
+                      "processed",
+                      "data_preprocessed.csv"))
 ```
 
 Jahre vor 1987 und 2020 ausgeschlossen wegen vermutlich unvollständigen Daten.
 
-# Description of dataset (German)
+# Variablenbeschreibungen
 
 * KG.Code = Katastralgemeindenummer
 * Katastralgemeinde = Katastralgemeindename
@@ -116,13 +65,11 @@ data %>% glimpse()
 skim_without_charts(data)
 ```
 
-Years which are recorded in the dataset:
+Zeitliche Ausdehnung des Datensatzes (nach Cleaning)
+
 ```{r}
 sort(unique(unlist(map(str_split(data$erwerbsdatum, "\\."), 3))))
 ```
-
-* Datensatz enthält Transaktionen zu Grundstücken in Wien
-* Erwerber und Veräußerer genauer anschauen
 
 ## Schutzzonen
 
@@ -169,7 +116,7 @@ data %>%
   count(wohnzone, sort = TRUE)
 ```
 
-# Einlagezahl
+## Einlagezahl
 
 ```{r}
 data %>% 
@@ -224,7 +171,6 @@ data %>%
   facet_wrap(~erwerber)
 ```
 
-
 ### Pro Bezirk
 
 ```{r}
@@ -235,6 +181,7 @@ data %>%
   geom_line() +
   facet_wrap(~bezirk)
 ```
+
 ## Anteil von Veräußerer und Erwerber über die Zeit
 
 ### Anteil an Privatpersonen
@@ -285,6 +232,7 @@ data %>%
   facet_wrap(~ bezirk) +
   theme(legend.position = "bottom")
 ```
+
 ### Nach Jahren
 
 ```{r}
@@ -299,6 +247,7 @@ data %>%
   ggplot(aes(x = jahr, y = n, color = erwerber)) +
   geom_line()
 ```
+
 ## Detailanalyse - Erwerber und Veräußer gemeinsam betrachtet
 
 ### Anzahl der Transaktionen zwischen Privatpersonen und GmbHs etc.:
@@ -321,7 +270,6 @@ data %>%
 
 ### Preise der Transaktionen zwischen Privatpersonen und GmbHs etc.:
 
-
 ```{r}
 data %>% 
   filter(verauserer == "Jur. Personen des Privatrechts", erwerber == "Privatpersonen") %>% 
@@ -341,136 +289,10 @@ data %>%
   geom_line()
 ```
 
+# Time Series Modelling mit modeltime
 
-## Vorhersage Quadratmeterpreis
+Ziel möglichst elaboriertes Modell finden, um Kaufpreise / Transaktionen vorherzusagen.
 
-```{r}
-summary(lm(m2_gfl ~ plz, data = filter(data, jahr == 2018)))
-```
-
-# Notes / Next steps:
-
-Grundstory:
-* Anteil von Erwerbungen durch "jur. Personen des Privatrechts" (GmbH) nimmt zu - Privatpersonen kaufen weniger
-* möglicher Grund - steigende Grundstückspreise?
-
-Ideen für das Dashboard / weitere Analyse:
- 
-* Einführungsseite, wo die verschiedene Kategorien beschrieben werden
-* Interaktive Karte, wo man nach Jahren filtern kann
-* Beziehung zwischen Erwerber und Veräußerern genauer anschauen ("Wo gab es Shifts?" sprich in welchen klassischen Wohnbezirken hat sich die Lage, hat sich das Verhältnis hinzu)
-* Grundstückpreise nur für Erwerber / Veräußerer betrachten
-* ggf. Forecast inkludieren und auf dieser Basis argumentieren? (auf Basis des Forecasts wird die xy weiter steigen / sinken)
-* Treemap um Anteile darzustellen?
-* Vorsicht mit den Preisen: NAs checken und ggf.
-
-Notes für Doku:
-
-* Ausschluss Jahre mit wenigen Datenpunkten
-* Join mit Lookup-Table zu Bezirken, danach Ausschluss von Fällen, die nicht auf einen Bezirk gemappt haben (Fälle außerhalb Wien - ca. 3000 Fälle exkludiert)
-* Exploriert Grundstückspreise /qm-Preise über die Jahre (pro Bezirk, pro K-Gemeinde) -> Preise steigen im Allgemeinen, (Vorsicht: nicht genau berichtet, inwieweit Preise inflationskorrigiert sind und außerdem
-* Schutzzonen / Wohnzonen -> nur mit geringem Anteil vertreten, schwierig hieraus eine Story zu bauen
-* Widmung betrachtet -> Kodierung der Widmung schlecht dokumentiert, nicht gut nachvollziehbar
-* Vorhersage Qudratmeterpreis / Preis -> ggf. noch zu berücksichtigen
-* Auch Zuordnung exploriert, aber zu keiner sinnvollen Story gekommen
-
-# Daten-Vorbereitung für Dashboard
-
-```{r}
-library(sf)
-library(here)
-library(janitor)
-
-map_data <-
-  st_read(here("01_data", "ZAEHLBEZIRKOGDPolygon.shp"), options = "ENCODING=WINDOWS-1252") %>%
-  clean_names() %>%
-  group_by(bez) %>%
-  summarize(geometry = st_union(geometry),
-            flaeche = sum(flaeche)) %>%
-  left_join(
-    data %>% distinct(bezirk) %>%
-      mutate(bez_num = str_extract(bezirk, "\\d{1,2}") %>% str_pad(2, side = "left", 0)),
-    by = c("bez" = "bez_num")
-  ) %>% 
-  mutate(
-    bez_num = as.numeric(bez)
-  ) %>% 
-    select(-flaeche) %>% 
-  rename(Bezirk = bezirk)
- 
-# ts_data <- data %>% 
-#   group_by(bezirk, jahr) %>%
-#   summarise(mdn_rel_kaufpreis = round(median(rel_kaufpreis, na.rm = TRUE), 2)) %>% 
-#   mutate(bez_num = str_extract(bezirk, "\\d{1,2}")) %>% 
-#   rename(Jahr = jahr,
-#          Preis = mdn_rel_kaufpreis)
-# 
-# write_csv(ts_data, here("01_data", "processed", "mdn_prices_by_year_district.csv"))
-st_write(map_data, here("01_data", "processed", "districts.shp"))
-
-ts_data_new <- data %>% 
-  filter(erwerber %in% c("Jur. Personen des Privatrechts", "Privatpersonen")) %>% 
-  group_by(erwerber, jahr, bezirk) %>% 
-  summarize(
-    `Median-Preis (gesamt, €)` = round(median(kaufpreis, na.rm = TRUE), 2),
-    `Median-Preis (relativ, €)` = round(median(rel_kaufpreis, na.rm = TRUE), 2),
-    `Anzahl Transaktionen`= n(),
-    `Gesamt-Volumen (€)` = sum(kaufpreis, na.rm = TRUE)
-  ) %>% 
-  ungroup() %>% 
-  rename(
-    Jahr = jahr,
-    Erwerber = erwerber,
-    Bezirk = bezirk
-  ) %>% 
-  mutate(bez_num = str_extract(Bezirk, "\\d{1,2}"),
-         Erwerber = if_else(Erwerber == "Privatpersonen", Erwerber, "Unternehmen")) 
-  # left_join(
-  #   select(map_data, bez, geometry),
-  #   by = c("bez_num" = "bez")
-  # ) %>% 
-  # st_as_sf()
-
-
-write_csv(ts_data_new,
-          here("01_data", "processed", "metrics_by_buyer_year_district.csv"))
-
-```
-
-
-```{r}
-
-pal <- colorNumeric("viridis", domain = map_data$flaeche)
-
-leaflet(map_data)  %>%
-  addProviderTiles(providers$CartoDB.Positron) %>%
-  addPolygons(
-    color = "#222",
-    weight = 0.7,
-    opacity = 1,
-    fillColor = ~ pal(map_data$flaeche),
-    fillOpacity = 0.7,
-    label = ~ lapply(paste0(
-      "<br>",
-      map_data$bezirk,
-      "</b><br> Vorhersage:",
-      round(map_data$flaeche, 2),
-      " Prozent"
-    ), HTML),
-    labelOptions = labelOptions(direction = "top"),
-    highlight = highlightOptions(color = "#FFF", bringToFront = TRUE)
-  )
-
-ts_data %>%
-  ggplot(aes(x = jahr, y = mdn_rel_kaufpreis)) +
-  geom_line() +
-  facet_wrap(~ bezirk, scales = "free_y") +
-  theme_bw() +
-  theme(strip.background = element_blank())
-
-```
-
-# Time Series Modelling
 ```{r}
 library(xgboost)
 library(tidymodels)
@@ -483,18 +305,25 @@ library(rsample)
 library(parsnip)
 library(recipes)
 library(workflows)
+library(forecast)
 ```
 
+## Nur für einen Bezirk
+
 ```{r}
+ts_data <- data %>% 
+  group_by(bezirk, jahr) %>% 
+  summarize(Preis = median(rel_kaufpreis, na.rm = TRUE)) %>% 
+  mutate(bez_num = str_extract(bezirk, "\\d{1,2}"))
+
 ts_data_bez1 <- ts_data %>%
-  mutate(Jahr = ymd(paste0(Jahr, "-01-01"))) %>% 
+  mutate(Jahr = ymd(paste0(jahr, "-01-01"))) %>% 
   filter(bez_num == 1) 
 
 ts_data_bez1 %>% 
   plot_time_series(Jahr, Preis)
 
 splits <- initial_time_split(ts_data_bez1, prop = 0.9)
-
 
 model_fit_arima_boosted <- arima_boost(
     min_n = 2,
@@ -580,16 +409,14 @@ ensemble_tbl %>%
 
 
 ```{r}
-library(forecast)
-
-
 fc_test <- ts(ts_data_bez1$Preis, start = 1987)
 plot(forecast(auto.arima(fc_test),h=5))
 plot(forecast(ets(fc_test),h=5))
 plot(forecast(auto.arima(fc_test,d=1),h=5))
 plot(forecast(auto.arima(fc_test,d=2),h=5))
 ```
-## Über alle Datensätze fitten
+
+## Modelle über alle Bezirke
 
 ```{r}
 ts_data %>%
@@ -646,9 +473,7 @@ recipe_2 <- recipe_1 %>%
 recipe_2 %>% prep() %>% summary()
 ```
 
-### Modelling
 ```{r}
-library(workflows)
 
 wkfl_fit_prohpet <- workflow() %>% 
   add_model(
@@ -713,138 +538,4 @@ calibration_tbl %>%
   plot_modeltime_forecast(.facet_ncol = 4)
 ```
 
-Conclusion: Gemeinsames Modell funktioniert nicht -> wahrscheinlich am einfachsten ein Modell pro Bezirk
-
-```{r}
-library(forecast)
-
-ts_data_bez2 <- ts_data %>% filter(bez_num == 22)
-
-fc_test <- ts(ts_data_bez2$Preis, start = 1987)
-plot(forecast(auto.arima(fc_test),h=10))
-plot(forecast(ets(fc_test),h=10))
-plot(forecast(auto.arima(fc_test,d=1),h=10))
-plot(forecast(auto.arima(fc_test,d=2),h=10))
-```
-
-Nächste Schritte:
-* Funktion schreiben, die Modell-Fit vergleicht und beste Modell auswählt
-* Funktion mappen auf jeden Bezirk
-* in der App / Doku muss dann auf die Limitationen des Ansatzes hingewiesen werden
-* ggf. noch Sample Size pro Bezirk / Jahr berichten
-
-
-Quelle: https://community.rstudio.com/t/how-to-compare-a-forecast-model-to-actual-data-and-what-is-uncertainty/23598/3
-
-# Vorhersage von Transaktionen für Bezirke
-
-```{r}
-
-library(forecast)
-
-ts_data_bez2 <- ts_data_new %>% filter(bez_num == 22, erwerber == "Jur. Personen des Privatrechts")
-
-fc_test <- ts(ts_data_bez2$n_transaktionen, start = 1987)
-plot(forecast(auto.arima(fc_test),h=10))
-plot(forecast(ets(fc_test),h=10))
-plot(forecast(auto.arima(fc_test,d=1),h=10))
-plot(forecast(auto.arima(fc_test,d=2),h=10))
-
-forecast_transactions <- function(data, district) {
-    district_data <- data %>% filter(bez_num == district, erwerber == "Jur. Personen des Privatrechts")
-  
-  district_ts <- ts(district_data$n_transaktionen, start = 1987)
-  plot(forecast(auto.arima(district_ts),h=10))
-  plot(forecast(ets(district_ts),h=10))
-  plot(forecast(auto.arima(district_ts,d=1),h=10))
-  plot(forecast(auto.arima(district_ts, d=2),h=10))
-}
-
-forecast_transactions(ts_data_new, 10)
-forecast_transactions(ts_data_new, 11)
-forecast_transactions(ts_data_new, 21)
-forecast_transactions(ts_data_new, 22)
-forecast_transactions(ts_data_new, 23)
-
-
-```
-
-```{r}
-forecast::autoplot(forecast(auto.arima(fc_test),h=10),
-         PI = TRUE,
-         shadecols = c("#FFFFFF", "#FFFFFf", "§sdfsfsdf"),
-         fcol = "#0000AA",
-         shaded = TRUE,
-         flwd = 0.5) +theme_bw()
-```
-
-```{r}
-library(ggfortify)
-
-fc_1 <- forecast(auto.arima(fc_test),h=10) 
-fc_2 <- forecast(ets(fc_test),h=10)
-fc_3 <- forecast(auto.arima(fc_test,d=1),h=10)
-fc_4 <- forecast(auto.arima(fc_test, d=2),h=10)
-
-test <- map(list(fc_1, fc_2, fc_3, fc_4), ~ as_tibble(fortify(.x))) %>% bind_rows(.id = "model")
-
-df1 <- fortify(fc_1) %>% as_tibble()
-
-generate_forecasts <- function(data, district) {
-
-  district_data <-
-    data %>%
-    filter(bez_num == district, Erwerber == "Unternehmen")  
-  
-  district <-unique(district_data$Bezirk)
-  district_ts <- ts(district_data$`Anzahl Transaktionen`, start = 1987)
-  
-  fc_1 <- forecast(auto.arima(district_ts), h = 10)
-  fc_2 <- forecast(ets(district_ts), h = 10)
-  fc_3 <- forecast(auto.arima(district_ts, d = 1), h = 10)
-  fc_4 <- forecast(auto.arima(district_ts, d = 2), h = 10)
-  
-  map(list(fc_1, fc_2, fc_3, fc_4),
-      ~ as_tibble(fortify(.x))) %>%
-    bind_rows(.id = "model") %>%
-    rename(
-      "Low95" = "Lo 95",
-      "Jahr" = "Index",
-      "Daten" = "Data",
-      "Low80" = "Lo 80",
-      "High95" = "Hi 95",
-      "High80" = "Hi 80",
-      "Vorhersage" = "Point Forecast"
-    ) %>%
-    mutate(
-      Modell = case_when(
-        model == 1 ~ "ARIMA (0,1,0)",
-        model == 2 ~ "ETS",
-        model == 3 ~ "ARIMA (0,1,0) mit Drift",
-        model == 4 ~ "ARIMA (0, 1, 2) mit Drift"
-      ),
-      Bezirk = district
-    )
-}
-
-fc_data <- map(c(10, 11, 21, 22, 23), ~ generate_forecasts(ts_data_new, .x)) %>% bind_rows() %>% select(-model)
-
-write_csv(fc_data, here("01_data", "processed", "fc_data.csv"))
-
-fc_plot <- ggplot(fc_data, aes(x = Jahr)) + 
-  geom_ribbon(aes(ymin = Low95, ymax = High95, fill = "95%"), fill = "#c0edec") +
-  geom_ribbon(aes(ymin = Low80, ymax = High80, fill = "80%"), fill = "#67c5c2") +
-  geom_line(aes(y = Daten, group = 1), colour = "black", size = 1.1) +
-  geom_line(aes(y = Vorhersage, group = 1), color = "#595959",  size = 0.75) +
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white")) +
-  labs(x = "Jahr", y = "Anzahl Transaktionen") +
-  facet_grid(vars(Bezirk), vars(Modell), scales = "free_y")
-
-library(plotly)
-
-ggplotly(fc_plot, tooltip = c("x", "y"))
-
-
-```
-
+Schlussfolgerung: Aufgrund von Limitattionen des Datensatzes (nur jährliche Aggregation, kurze Zeitreihe, etc.) keine elaborierten Zeitreihen-Modell möglich. Alle gefitteten Zeitreihen-Modelle daher nur als ganz grober Inidkator aufzufassen. Hinweis: Für die Vorhersage der Transaktionsanzahl im Dashboard wurde das `forecast`-Package verwendet (siehe `preprocessing.R`).
