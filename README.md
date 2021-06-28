@@ -1,2 +1,2 @@
-# land_prices
-Vizualisation of land prices in Vienna
+# real_estate_transactions
+A demo dashboard visualizing real estate transactions in Vienna.
