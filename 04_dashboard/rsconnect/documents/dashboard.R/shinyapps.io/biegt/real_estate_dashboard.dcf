@@ -1,0 +1,13 @@
+name: real_estate_dashboard
+title: real_estate_dashboard
+username:
+account: biegt
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4328305
+bundleId: 4764040
+url: https://biegt.shinyapps.io/real_estate_dashboard/
+when: 1624877159.55729
+lastSyncTime: 1624877159.55729
+asMultiple: FALSE
+asStatic: FALSE

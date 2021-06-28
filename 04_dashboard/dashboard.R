@@ -16,10 +16,10 @@ library(sf)
 # Datenimport -------------------------------------------------------------
 col_pal <- c("#67c5c2", "#c84127")
 
-fc_data <- read_csv(here("01_data", "processed", "fc_data.csv"))
+fc_data <- read_csv("./data/fc_data.csv")
 
 ts_data <-
-  read_csv(here("01_data", "processed", "metrics_by_buyer_year_district.csv")) %>%
+  read_csv("./data/metrics_by_buyer_year_district.csv") %>%
   mutate(Bezirk = factor(
     str_trim(Bezirk),
     levels = c(
@@ -49,7 +49,7 @@ ts_data <-
     )
   ))
 
-map_data <- st_read(here("01_data", "processed", "districts.shp"))
+map_data <- st_read("./data/districts.shp")
 
 
 # User Interface ----------------------------------------------------------
