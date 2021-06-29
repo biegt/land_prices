@@ -165,7 +165,7 @@ ui <- dashboardPage(
                 tags$strong("Daher besteht die berechtigte Überlegung unsere Investionen in diesen Bezirken für gewerbliche Grundstücke ehestmöglich zu verstärken.")
               ),
               tags$p(
-                "Als Limitation ist anzumerken, dass die Qualtität des zugrundeliegenden Datensatzes eher gering ist (sodass auch die Preise nicht Hauptgegenstand unserer Analyse waren). Die Zeitreihen-Modelle dürfen darüber hinaus aufgrund der jährlichen Aggregationen, vergleichsweise kurzen Zeitreihen und fehlender Berücksichtigung äußerer Faktoren nu als grober Indikator verstanden werden."
+                "Als Limitation ist anzumerken, dass die Qualtität des zugrundeliegenden Datensatzes eher gering ist (sodass auch die Preise nicht Hauptgegenstand unserer Analyse waren). Die Zeitreihen-Modelle dürfen darüber hinaus aufgrund der jährlichen Aggregationen, vergleichsweise kurzen Zeitreihen und fehlender Berücksichtigung äußerer Faktoren nur als grober Indikator verstanden werden."
               ),
               tags$p(
                 "Das Dashboard steht dem Kollegium für weitere Exploration zur Verfügung."

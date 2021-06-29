@@ -5,9 +5,9 @@ account: biegt
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 4328305
-bundleId: 4764040
+bundleId: 4770056
 url: https://biegt.shinyapps.io/real_estate_dashboard/
-when: 1624877159.55729
-lastSyncTime: 1624877159.55729
+when: 1624991908.72743
+lastSyncTime: 1624991908.72743
 asMultiple: FALSE
 asStatic: FALSE
